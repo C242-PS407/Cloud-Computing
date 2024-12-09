@@ -8,7 +8,7 @@ const fs = require("fs");
 // Environment-specific path for Firebase credentials
 const serviceAccountPath =
   process.env.NODE_ENV === "production"
-    ? "/secrets/authentication/firebase.json" // Production path (mounted volume in Cloud Run)
+    ? "/secrets/authentication" // Production path (mounted volume in Cloud Run)
     : "../firebase-key.json"; // Local development path
 
 if (!fs.existsSync(serviceAccountPath)) {
