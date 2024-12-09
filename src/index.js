@@ -3,8 +3,22 @@ const dotenv = require("dotenv");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const admin = require("firebase-admin");
-const credentials = require("../firebase-key.json");
+const fs = require("fs");
 
+// Environment-specific path for Firebase credentials
+const serviceAccountPath =
+  process.env.NODE_ENV === "production"
+    ? "/secrets/firebase.json" // Production path (mounted volume in Cloud Run)
+    : "../firebase-key.json"; // Local development path
+
+if (!fs.existsSync(serviceAccountPath)) {
+  throw new Error("Firebase credentials file not found at " + serviceAccountPath);
+}
+
+// Read the Firebase credentials JSON
+const credentials = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+
+// Initialize Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert(credentials),
 });
@@ -20,9 +34,9 @@ app.use(express.urlencoded({ extended: true }));
 
 const jwtSecret = process.env.JWT_SECRET;
 
+// Middleware for token authentication
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = req.headers.authorization; // Ambil token langsung tanpa memproses prefix
+  const token = req.headers.authorization; // Extract token directly
   if (!token) {
     return res.status(401).json({ error: "Token not provided" });
   }
@@ -35,9 +49,10 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Routes
 app.get("/", (req, res) => {
   res.send({
-    message: "welcome to my api",
+    message: "Welcome to my API",
   });
 });
 
@@ -52,20 +67,20 @@ app.post("/signup", async (req, res) => {
       return res.status(400).json({ error: "Password must be at least 8 characters long" });
     }
 
-    // Cek apakah email sudah terdaftar
+    // Check if the email is already registered
     const userExists = await db.collection("account").where("email", "==", email).get();
     if (!userExists.empty) {
       return res.status(400).json({ error: "Email already registered" });
     }
 
-    // Daftarkan pengguna ke Firebase Authentication
+    // Register user in Firebase Authentication
     const userRecord = await admin.auth().createUser({
       email: email,
       password: password,
       displayName: name,
     });
 
-    // Simpan data tambahan ke Firestore
+    // Save additional data in Firestore
     await db.collection("account").doc(userRecord.uid).set({
       name: name,
       email: email,
@@ -86,13 +101,10 @@ app.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
-    // Validasi email dan password menggunakan Firebase Authentication
+    // Validate email using Firebase Authentication
     const userRecord = await admin.auth().getUserByEmail(email);
 
-    // Gunakan Firebase Client SDK atau tambahkan validasi manual password jika Anda mengelola hashing sendiri
-    // Dalam kasus ini, kita asumsikan password sudah sesuai di Firebase Authentication.
-
-    // Buat JWT token
+    // Create JWT token
     const token = jwt.sign({ uid: userRecord.uid, email: userRecord.email }, jwtSecret, {
       expiresIn: "1h",
     });
@@ -119,5 +131,5 @@ app.get("/user", authenticateToken, (req, res) => {
 
 const port = parseInt(process.env.PORT) || 8080;
 app.listen(port, () => {
-  console.log(`use this port : ${port}`);
+  console.log(`Server running on port: ${port}`);
 });
